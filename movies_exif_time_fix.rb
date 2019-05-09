@@ -16,7 +16,7 @@ ExifDateTime = Struct.new(:date, :time) do
   end
 
   def self.from_file_name(file_name)
-    m = file_name.match /(?<date>\d{8})_(?<time>\d{6})\.mp4/
+    m = file_name.match(/(?<date>\d{8})_(?<time>\d{6})\.mp4/)
     date = m[:date]
     time = m[:time]
     ExifDateTime.new(
@@ -28,13 +28,15 @@ end
 
 class MediaFile
   attr_reader :name
+  attr_reader :path
 
-  def initialize(file_name)
+  def initialize(file_name, dir)
     @name = file_name
+    @path = dir + '/' + file_name
   end
 
   def file_creation_date
-    original_date = `exiftool -FileModifyDate #{name}`
+    original_date = `exiftool -FileModifyDate #{path}`
     original_date.split(': ')[1].chomp
   end
 
@@ -53,26 +55,32 @@ end
 def let_user_decide_if_process(media_file)
   puts "Do you want to change file: #{media_file.name}?"
   puts "Change date from #{media_file.file_creation_date} to #{media_file.exif_creation_date}? y/n?"
-  response = gets.chomp
+  response = STDIN.gets.chomp
   response == 'y'
 end
 
 def change_file_date_based_on_name(media_file)
   # Sample command
   # `exiftool '-TrackCreateDate=2015:01:18 12:00:00'`
-  name = media_file.name
+  path = media_file.path
   overwrite_file = '-overwrite_original_in_place'
-  puts "Processing file #{name}"
-  `exiftool #{overwrite_file} '-TrackCreateDate=#{media_file.exif_creation_date}' #{name}`
-  `exiftool #{overwrite_file} "-CreateDate<TrackCreateDate" #{name}`
-  `exiftool "-FileModifyDate<TrackCreateDate" #{name}`
-  `exiftool "-FileModifyDate<TrackCreateDate" #{name}`
+  puts "Processing file #{path}"
+  `exiftool #{overwrite_file} '-TrackCreateDate=#{media_file.exif_creation_date}' #{path}`
+  `exiftool #{overwrite_file} "-CreateDate<TrackCreateDate" #{path}`
+  `exiftool "-FileModifyDate<TrackCreateDate" #{path}`
+  `exiftool "-FileModifyDate<TrackCreateDate" #{path}`
 end
 
-root = Dir.open(Dir.pwd)
+target_dir = ARGV[0] != nil ? ARGV[0] : Dir.pwd
+unless (Dir.exists?(target_dir))
+  puts "First argument should be directory path - are you sure it is correct?"
+  exit 1
+end
+root = Dir.open(target_dir)
+puts "Processing directory: #{root.path}"
 root.entries
     .select { |file| file.end_with? '.mp4' }
     .select { |file| is_correct_name_format?(file) }
-    .collect { |file| MediaFile.new(file) }
+    .collect { |file| MediaFile.new(file, root.path) }
     .select { |media_file| let_user_decide_if_process(media_file) }
     .each { |media_file| change_file_date_based_on_name(media_file) }
